@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "AllowanceExtractor": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7148",
+      "launchBrowser": false
+    }
+  }
+}
