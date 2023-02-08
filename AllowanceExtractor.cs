@@ -7,29 +7,38 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using HtmlAgilityPack;
+using System.Net.Http;
 
 namespace AllowanceExtractor.Function
 {
+
     public static class AllowanceExtractor
     {
+        private const string ALLOWANCE_INFOS_PATTERN = @"^([A-Z\-'\s(,)]+) (\d{0,3})\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])";
+        private const string ALLOWANCE_URL = "https://mon-vie-via.businessfrance.fr/indemnite-vie";
+
         [FunctionName("AllowanceExtractor")]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req,
             ILogger log)
         {
-            log.LogInformation("C# HTTP trigger function processed a request.");
+            var web = new HtmlWeb();
+            var html = web.Load(ALLOWANCE_URL);
+            var a = html.DocumentNode.SelectSingleNode("//a[contains(text(), 'Barème V.I.E')]/@href");
+            var href = a.GetAttributeValue("href", null);
 
-            string name = req.Query["name"];
+            var httpClient = new HttpClient();
+            var response = await httpClient.GetAsync(href);
 
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            name = name ?? data?.name;
-
-            string responseMessage = string.IsNullOrEmpty(name)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"Hello, {name}. This HTTP triggered function executed successfully.";
-
-            return new OkObjectResult(responseMessage);
+            if (response.IsSuccessStatusCode)
+            {
+                return new OkObjectResult("PDF request ok");
+            }
+            else
+            {
+                return new ObjectResult("Something went wrong") { StatusCode = StatusCodes.Status500InternalServerError };
+            }
         }
     }
 }
