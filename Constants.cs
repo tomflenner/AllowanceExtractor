@@ -2,9 +2,16 @@ using System.Collections.Generic;
 
 namespace AllowanceExtractor.Function;
 
-public static class Constants
+public static class AllowanceScrapping
 {
-    public static readonly Dictionary<string, string> Countries = new Dictionary<string, string>
+    public const string ALLOWANCE_URL = "https://mon-vie-via.businessfrance.fr/indemnite-vie";
+    public const string ALLOWANCE_INFOS_PATTERN = @"^([A-Z\-'\s(,)]+) (\d{0,3})\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])";
+    public const int ALLOWANCE_INFOS_PATTERN_GROUP_COUNT = 6;
+}
+
+public static class Datas
+{
+    public static readonly Dictionary<string, string> CountriesCurrencyCode = new Dictionary<string, string>
     {
         {"AFGHANISTAN", "AFN"},
         {"AFRIQUE DU SUD (AUTRES VILLES)", "ZAR"},

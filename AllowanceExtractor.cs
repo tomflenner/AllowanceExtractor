@@ -18,16 +18,13 @@ namespace AllowanceExtractor.Function
 {
     public static class AllowanceExtractor
     {
-        private const string ALLOWANCE_INFOS_PATTERN = @"^([A-Z\-'\s(,)]+) (\d{0,3})\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])\s+([\d+,.\s]+ [€])";
-        private const string ALLOWANCE_URL = "https://mon-vie-via.businessfrance.fr/indemnite-vie";
-
         [FunctionName("AllowanceExtractor")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req,
             ILogger log)
         {
             var web = new HtmlWeb();
-            var html = web.Load(ALLOWANCE_URL);
+            var html = web.Load(AllowanceScrapping.ALLOWANCE_URL);
             var a = html.DocumentNode.SelectSingleNode("//a[contains(text(), 'Barème V.I.E')]/@href");
             var href = a.GetAttributeValue("href", null);
 
@@ -56,9 +53,9 @@ namespace AllowanceExtractor.Function
                     // Loop through each line of text
                     foreach (var line in pdfLines.Skip(4))
                     {
-                        var match = Regex.Match(line, ALLOWANCE_INFOS_PATTERN);
+                        var match = Regex.Match(line, AllowanceScrapping.ALLOWANCE_INFOS_PATTERN);
 
-                        if (match.Groups.Count < 6) continue;
+                        if (match.Groups.Count < AllowanceScrapping.ALLOWANCE_INFOS_PATTERN_GROUP_COUNT) continue;
 
                         var country = match.Groups[1].Value;
                         var countryCode = match.Groups[2].Value;
@@ -71,7 +68,7 @@ namespace AllowanceExtractor.Function
 
                         string currencyCode = string.Empty;
 
-                        if (!Constants.Countries.TryGetValue(country, out currencyCode)) continue;
+                        if (!Datas.CountriesCurrencyCode.TryGetValue(country, out currencyCode)) continue;
 
                         allowances.Add(new Allowance()
                         {
@@ -88,7 +85,7 @@ namespace AllowanceExtractor.Function
             }
             else
             {
-                return new ObjectResult("Something went wrong") { StatusCode = StatusCodes.Status500InternalServerError };
+                return new ObjectResult(value: "Something went wrong") { StatusCode = StatusCodes.Status500InternalServerError };
             }
         }
     }
