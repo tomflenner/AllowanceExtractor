@@ -4,12 +4,10 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using HtmlAgilityPack;
 using System.Net.Http;
-using iTextSharp.text.pdf;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Linq;
+using MongoDB.Driver;
 
 namespace AllowanceExtractor.Function
 {
@@ -20,83 +18,48 @@ namespace AllowanceExtractor.Function
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var web = new HtmlWeb();
-            var html = web.Load(AllowanceScrapping.ALLOWANCE_URL);
-            var a = html.DocumentNode.SelectSingleNode("//a[contains(text(), 'Barème V.I.E')]/@href");
-            var href = a.GetAttributeValue("href", null);
+            var client = new MongoClient(System.Environment.GetEnvironmentVariable("MongoDBAtlasConnectionString"));
+            var database = client.GetDatabase("AllowanceCalculator");
+            var collection = database.GetCollection<Allowance>("Allowances");
 
-            var httpClient = new HttpClient();
-            var response = await httpClient.GetAsync(href);
-
-            if (response.IsSuccessStatusCode)
+            if (collection.EstimatedDocumentCount() == 0)
             {
-                var pdfStream = await response.Content.ReadAsStreamAsync();
+                //Collection is empty, so we need to request PDF and parse
+                var allowances = await RetrieveAllowancesFromBusinessFrance();
 
-                // Load the contents of the PDF into a PdfReader object
-                var pdfReader = new PdfReader(pdfStream);
-
-                // Retrieve allowances info from contents of the PDF
-                var allowances = new List<Allowance>();
-
-                // Loop over each page of the PDF
-                for (int i = 1; i < pdfReader.NumberOfPages; i++)
+                if (allowances.Count() > 0)
                 {
-                    // Extract the text from the current page
-                    var pdfContents = iTextSharp.text.pdf.parser.PdfTextExtractor.GetTextFromPage(pdfReader, i);
-
-                    // Split the text into lines
-                    var pdfLines = pdfContents.Split('\n');
-
-                    // Loop through each line of text
-                    foreach (var line in pdfLines.Skip(4))
-                    {
-                        var match = Regex.Match(line, AllowanceScrapping.ALLOWANCE_INFOS_PATTERN);
-
-                        if (match.Groups.Count < AllowanceScrapping.ALLOWANCE_INFOS_PATTERN_GROUP_COUNT) continue;
-
-                        var country = match.Groups[1].Value;
-                        var countryCode = match.Groups[2].Value;
-
-                        decimal fixedAllowance, geographicAllowance;
-
-                        if (!decimal.TryParse(match.Groups[3].Value.FormatValue(), out fixedAllowance)) continue;
-
-                        if (!decimal.TryParse(match.Groups[4].Value.FormatValue(), out geographicAllowance)) continue;
-
-                        string currencyCode = string.Empty;
-
-                        if (!Datas.CountriesCurrencyCode.TryGetValue(country, out currencyCode)) continue;
-
-                        allowances.Add(new Allowance()
-                        {
-                            Country = country,
-                            CountryCode = countryCode,
-                            FixedAllowance = fixedAllowance,
-                            GeographicAllowance = geographicAllowance,
-                            CurrencyCode = currencyCode,
-                        });
-                    }
+                    await collection.InsertManyAsync(allowances);
+                    return new OkObjectResult(value: "Allowances found and inserted in database");
                 }
-
-                pdfStream.Close(); return new OkObjectResult("PDF request ok");
+                else
+                {
+                    return new ObjectResult(value: "No allowance data found") { StatusCode = StatusCodes.Status500InternalServerError };
+                }
             }
             else
             {
-                return new ObjectResult(value: "Something went wrong") { StatusCode = StatusCodes.Status500InternalServerError };
+                //Collection is not empty, so we need to request database
+                return new OkObjectResult(value: "Database request ok");
             }
+
+        }
+
+        private static async Task<IEnumerable<Allowance>> RetrieveAllowancesFromBusinessFrance()
+        {
+            var pdfUrl = AllowanceScrapping.ScrapePdfUrl();
+
+            var httpClient = new HttpClient();
+            var response = await httpClient.GetAsync(pdfUrl);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return await PdfParsing.ParsePdf(response.Content);
+            }
+
+            return Enumerable.Empty<Allowance>();
         }
     }
 
-    public class Allowance
-    {
-        public string Country { get; set; } = string.Empty;
 
-        public string CountryCode { get; set; } = string.Empty;
-
-        public string CurrencyCode { get; set; } = string.Empty;
-
-        public decimal FixedAllowance { get; set; }
-
-        public decimal GeographicAllowance { get; set; }
-    }
 }
