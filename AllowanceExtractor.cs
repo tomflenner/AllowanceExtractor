@@ -5,9 +5,9 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Net.Http;
-using System.Collections.Generic;
 using System.Linq;
 using MongoDB.Driver;
+using System;
 
 namespace AllowanceExtractor.Function
 {
@@ -20,32 +20,75 @@ namespace AllowanceExtractor.Function
         {
             var client = new MongoClient(System.Environment.GetEnvironmentVariable("MongoDBAtlasConnectionString"));
             var database = client.GetDatabase("AllowanceCalculator");
-            var collection = database.GetCollection<Allowance>("Allowances");
+            var collection = database.GetCollection<AllowanceDocument>("Allowances");
 
+            //Database empty YES
             if (collection.EstimatedDocumentCount() == 0)
             {
-                //Collection is empty, so we need to request PDF and parse
-                var allowances = await RetrieveAllowancesFromBusinessFrance();
+                log.LogInformation("Database is empty, parse and insert into it");
+                return await ParseAndInsertToDatabase(collection);
+            }
+            //Database empty NO
+            else
+            {
+                //For filter and findOptions see : https://stackoverflow.com/questions/69741657/mongodb-c-sharp-class-with-no-objectid
+                var filter = Builders<AllowanceDocument>.Filter.Empty;
 
-                if (allowances.Count() > 0)
+                var findOptions = new FindOptions<AllowanceDocument>()
                 {
-                    await collection.InsertManyAsync(allowances);
-                    return new OkObjectResult(value: "Allowances found and inserted in database");
+                    Projection = "{ _id : 0 }",
+                };
+
+                var result = (await collection.FindAsync(filter, findOptions)).ToList();
+
+                // Problem here, we should only have ONE entry.
+                if (result.Count != 1)
+                {
+                    // Delete all from database
+                    await collection.DeleteManyAsync(filter);
+
+                    log.LogInformation("Database is not empty but got too many document, parse and insert into it again");
+                    // Parse and insert
+                    return await ParseAndInsertToDatabase(collection);
                 }
                 else
                 {
-                    return new ObjectResult(value: "No allowance data found") { StatusCode = StatusCodes.Status500InternalServerError };
+                    var allowanceDocument = result[0];
+
+                    // The current date is over the quarter document date
+                    if (DateTime.Now >= allowanceDocument.DocumentDate.AddMonths(3))
+                    {
+                        // Delete all from database
+                        await collection.DeleteManyAsync(filter);
+
+                        log.LogInformation("Database is not empty but document expired (not in quarter), parse and insert into it again");
+                        return await ParseAndInsertToDatabase(collection);
+                    }
+
+                    log.LogInformation("Database is not empty, retrieve datas from collection");
+                    return new OkObjectResult(allowanceDocument.Allowances);
                 }
+            }
+        }
+
+        private static async Task<IActionResult> ParseAndInsertToDatabase(IMongoCollection<AllowanceDocument> collection)
+        {
+            //Request WEBSITE
+            var allowanceDocument = await RetrieveAllowancesFromBusinessFrance();
+
+            if (allowanceDocument.Allowances.Count() > 0)
+            {
+                //Store in database
+                await collection.InsertOneAsync(allowanceDocument);
+                return new OkObjectResult(allowanceDocument.Allowances);
             }
             else
             {
-                //Collection is not empty, so we need to request database
-                return new OkObjectResult(value: "Database request ok");
+                return new ObjectResult(value: "No allowance data found") { StatusCode = StatusCodes.Status500InternalServerError };
             }
-
         }
 
-        private static async Task<IEnumerable<Allowance>> RetrieveAllowancesFromBusinessFrance()
+        private static async Task<AllowanceDocument> RetrieveAllowancesFromBusinessFrance()
         {
             var pdfUrl = AllowanceScrapping.ScrapePdfUrl();
 
@@ -57,9 +100,7 @@ namespace AllowanceExtractor.Function
                 return await PdfParsing.ParsePdf(response.Content);
             }
 
-            return Enumerable.Empty<Allowance>();
+            return null;
         }
     }
-
-
 }
