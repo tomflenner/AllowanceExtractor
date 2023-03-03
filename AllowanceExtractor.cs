@@ -81,7 +81,7 @@ namespace AllowanceExtractor.Function
             {
                 //Store in database
                 await collection.InsertOneAsync(allowanceDocument);
-                return new OkObjectResult(allowanceDocument.Allowances);
+                return new OkObjectResult(allowanceDocument);
             }
             else
             {
