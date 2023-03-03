@@ -47,8 +47,10 @@ public static class PdfParsing
                     {
                         var formattedDate = match.Value.ToLower().Replace("1er", "1");
 
+                        CultureInfo cultureInfo = new CultureInfo("fr-FR");
+
                         // We have a date
-                        if (DateTime.TryParseExact(formattedDate, "d MMMM yyyy", null, style: System.Globalization.DateTimeStyles.None, out documentDate))
+                        if (DateTime.TryParseExact(formattedDate, "d MMMM yyyy", cultureInfo, style: System.Globalization.DateTimeStyles.None, out documentDate))
                         {
                             allowanceDocument.DocumentDate = documentDate;
                         }

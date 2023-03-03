@@ -18,7 +18,8 @@ namespace AllowanceExtractor.Function
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var client = new MongoClient(System.Environment.GetEnvironmentVariable("MongoDBAtlasConnectionString"));
+            var connectionString = System.Environment.GetEnvironmentVariable("MongoDBAtlasConnectionString", EnvironmentVariableTarget.Process);
+            var client = new MongoClient(connectionString);
             var database = client.GetDatabase("AllowanceCalculator");
             var collection = database.GetCollection<AllowanceDocument>("Allowances");
 
