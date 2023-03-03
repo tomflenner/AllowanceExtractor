@@ -67,7 +67,7 @@ namespace AllowanceExtractor.Function
                     }
 
                     log.LogInformation("Database is not empty, retrieve datas from collection");
-                    return new OkObjectResult(allowanceDocument.Allowances);
+                    return new OkObjectResult(allowanceDocument);
                 }
             }
         }
