@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.parser;
+using Microsoft.Extensions.Logging;
 using static AllowanceExtractor.Function.Datas;
 
 namespace AllowanceExtractor.Function;
@@ -28,11 +29,13 @@ public static class PdfParsing
             // Load the contents of the PDF into a PdfReader object
             var pdfReader = new PdfReader(pdfStream);
 
+            ITextExtractionStrategy strategy = new SimpleTextExtractionStrategy();
+
             // Loop over each page of the PDF
             for (int pageNumber = 1; pageNumber < pdfReader.NumberOfPages; pageNumber++)
             {
                 // Extract the text from the current page
-                var pdfContents = PdfTextExtractor.GetTextFromPage(pdfReader, pageNumber);
+                var pdfContents = PdfTextExtractor.GetTextFromPage(pdfReader, pageNumber, strategy);
 
                 // Split the text into lines
                 var pdfLines = pdfContents.Split('\n');
