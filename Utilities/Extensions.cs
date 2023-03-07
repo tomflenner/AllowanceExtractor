@@ -11,6 +11,7 @@ public static class Extensions
         StringBuilder sb = new StringBuilder(value);
 
         sb.Replace(" ", "");
+        sb.Replace(",", ".");
         sb.Replace("€", "");
 
         return sb.ToString();
